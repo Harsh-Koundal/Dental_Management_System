@@ -35,7 +35,7 @@ router.patch("/:id/appointment", updateAppointment);
 // Gallery
 router.post(
     "/:id/gallery",
-    upload.array("image"),  
+    upload.single("image"),
     uploadGallery
 );
 
