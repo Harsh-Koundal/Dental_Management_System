@@ -9,6 +9,38 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const ACCESS_TOKEN_MAX_AGE = 15 * 60 * 1000;
+const REFRESH_TOKEN_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+const cookieOptions = (maxAge) => ({
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Lax",
+    maxAge,
+});
+
+const hashRefreshToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
+
+const issueTokens = async (user, req, res) => {
+    const accessToken = jwt.sign(
+        { id: user._id, role: user.role },
+        process.env.ACCESS_TOKEN_SECRET,
+        { expiresIn: "15m" }
+    );
+    const refreshToken = crypto.randomBytes(64).toString("hex");
+
+    await RefreshToken.create({
+        userId: user._id,
+        tokenHash: hashRefreshToken(refreshToken),
+        ipAddress: req.ip,
+        deviceInfo: req.headers["user-agent"],
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_MAX_AGE),
+    });
+
+    res.cookie("accessToken", accessToken, cookieOptions(ACCESS_TOKEN_MAX_AGE));
+    res.cookie("refreshToken", refreshToken, cookieOptions(REFRESH_TOKEN_MAX_AGE));
+    return accessToken;
+};
+
 export const signup = async (req, res, next) => {
     try {
         const { Firstname, Lastname, email, password} = req.body;
@@ -153,48 +185,15 @@ export const login = async (req, res, next) => {
         user.loginAttempts = 0;
         await user.save();
 
-        const accessToken = jwt.sign(
-            { id: user._id, role: user.role },
-            process.env.ACCESS_TOKEN_SECRET,
-            { expiresIn: "15m" }
-        );
-
-        const refreshToken = crypto.randomBytes(64).toString("hex");
-
-        const tokenHash = crypto
-            .createHash("sha256")
-            .update(refreshToken)
-            .digest("hex");
-
-        await RefreshToken.create({
-            userId: user._id,
-            tokenHash,
-            ipAddress: req.ip,
-            deviceInfo: req.headers["user-agent"],
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        });
-
-        res.cookie("accessToken", accessToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "Lax",
-            maxAge: 15 * 60 * 1000,
-        })
-
-        res.cookie("refreshToken", refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "Lax",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-        })
+        const accessToken = await issueTokens(user, req, res);
 
         return res.status(200).json({ 
             message: "Login Successful",
             accessToken,
             user: {
                 id: user._id,
-                Firstname: user.Firstname,
-                Lastname: user.Lastname,
+                Firstname: user.firstName,
+                Lastname: user.lastName,
                 email: user.email,
                 role: user.role
             }
@@ -202,6 +201,40 @@ export const login = async (req, res, next) => {
 
     } catch (err) {
         console.error("Failed to login", err);
+        next(err);
+    }
+};
+
+export const refreshAccessToken = async (req, res, next) => {
+    try {
+        const refreshToken = req.cookies?.refreshToken;
+        if (!refreshToken) {
+            return res.status(401).json({ message: "Refresh token is required" });
+        }
+
+        const storedToken = await RefreshToken.findOne({
+            tokenHash: hashRefreshToken(refreshToken),
+            revoked: false,
+            expiresAt: { $gt: new Date() },
+        });
+
+        if (!storedToken) {
+            return res.status(401).json({ message: "Refresh token is invalid or expired" });
+        }
+
+        const user = await User.findById(storedToken.userId);
+        if (!user || user.isBlocked) {
+            return res.status(401).json({ message: "User is no longer authorized" });
+        }
+
+        // Rotate the refresh token so an intercepted old token cannot be reused.
+        storedToken.revoked = true;
+        await storedToken.save();
+        const accessToken = await issueTokens(user, req, res);
+
+        return res.status(200).json({ message: "Access token refreshed", accessToken });
+    } catch (err) {
+        console.error("Token refresh failed", err);
         next(err);
     }
 };
@@ -219,17 +252,8 @@ export const logout = async (req, res, next) => {
             await RefreshToken.deleteOne({ tokenHash });
         }
 
-        res.clearCookie("accessToken", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "Lax",
-        });
-
-        res.clearCookie("refreshToken", {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "Lax",
-        });
+        res.clearCookie("accessToken", cookieOptions(0));
+        res.clearCookie("refreshToken", cookieOptions(0));
 
         return res.status(200).json({
             message: "Logout Successfull"
@@ -248,8 +272,8 @@ export const getProfile = async (req, res, next) => {
         }
         return res.status(200).json({
             id: user._id,
-            Firstname: user.Firstname,
-            Lastname: user.Lastname,
+            Firstname: user.firstName,
+            Lastname: user.lastName,
             email: user.email,
             role: user.role
         });

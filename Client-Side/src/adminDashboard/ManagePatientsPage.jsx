@@ -25,6 +25,15 @@ const API = `${import.meta.env.VITE_BACKEND_BASE_URL}/admin/patient`;
 const patientIdOf = (patient) => patient?._id || patient?.id;
 const patientName = (patient) => `${patient?.firstName || ""} ${patient?.lastName || ""}`.trim() || "Unnamed patient";
 const galleryImageUrl = (image) => image.imageUrl || image.url;
+const appointmentParts = (appointment) => {
+  if (appointment && typeof appointment === "object" && !(appointment instanceof Date) && appointment.month) {
+    return { month: appointment.month, day: String(appointment.day || "") };
+  }
+  const date = appointment ? new Date(appointment) : null;
+  return date && !Number.isNaN(date.getTime())
+    ? { month: MONTHS[date.getMonth()], day: String(date.getDate()) }
+    : { month: "", day: "" };
+};
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -324,8 +333,9 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
 
   useEffect(() => {
     if (patient) {
-      setAppointmentMonth(patient.nextAppointment?.month || "");
-      setAppointmentDay(patient.nextAppointment?.day || "");
+      const appointment = appointmentParts(patient.nextAppointment);
+      setAppointmentMonth(appointment.month);
+      setAppointmentDay(appointment.day);
     }
   }, [patient]);
 
@@ -429,7 +439,7 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
                     { icon: <Mail size={14} className="text-teal-500" />, label: "Email", val: patient.email },
                     { icon: <Phone size={14} className="text-teal-500" />, label: "Phone", val: patient.phone },
                     { icon: <Activity size={14} className="text-teal-500" />, label: "Treatment", val: patient.activeTreatment },
-                    { icon: <Calendar size={14} className="text-teal-500" />, label: "Next Appointment", val: patient.nextAppointment?.month && patient.nextAppointment?.day ? `${patient.nextAppointment.month} ${patient.nextAppointment.day}` : "Not scheduled" },
+                    { icon: <Calendar size={14} className="text-teal-500" />, label: "Next Appointment", val: patient.nextAppointment ? fmtDate(patient.nextAppointment) : "Not scheduled" },
                   ].map(({ icon, label, val }) => (
                     <div key={label} className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-2.5">
                       <div className="h-8 w-8 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">{icon}</div>
@@ -652,6 +662,7 @@ const PatientModal = ({ patient, onClose, onSave }) => {
     status: "Active", avatar: null, currentMonthProgress: 0, dob: "", notes: "",
     nextAppointment: { month: "", day: "" }
   });
+  const formAppointment = appointmentParts(form.nextAppointment);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white shadow-2xl">
@@ -696,7 +707,7 @@ const PatientModal = ({ patient, onClose, onSave }) => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <select
-                  value={form.nextAppointment?.month || ""}
+                  value={formAppointment.month}
                   onChange={(e) => setForm((f) => ({ ...f, nextAppointment: { ...f.nextAppointment, month: e.target.value } }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition appearance-none"
                 >
@@ -706,7 +717,7 @@ const PatientModal = ({ patient, onClose, onSave }) => {
               </div>
               <div>
                 <select
-                  value={form.nextAppointment?.day || ""}
+                  value={formAppointment.day}
                   onChange={(e) => setForm((f) => ({ ...f, nextAppointment: { ...f.nextAppointment, day: e.target.value } }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition appearance-none"
                 >

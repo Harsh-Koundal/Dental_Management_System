@@ -1,40 +1,80 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
 const AuthContext = createContext();
 
 const API = import.meta.env.VITE_BACKEND_BASE_URL || import.meta.env.VITE_API_URL;
-const TOKEN_KEY = "accessToken";
+let refreshRequest = null;
+
+const refreshAccessToken = async () => {
+  if (!refreshRequest) {
+    refreshRequest = axios
+      .post(`${API}/auth/refresh`, {}, { withCredentials: true, skipAuthRefresh: true })
+      .finally(() => { refreshRequest = null; });
+  }
+  return refreshRequest;
+};
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const authAxios = axios.create({
+  const authAxios = useMemo(() => axios.create({
     baseURL: API,
     withCredentials: true,
     headers: { "Content-Type": "application/json" },
-  });
+  }), []);
 
   useEffect(() => {
-    if (token) {
-      localStorage.setItem(TOKEN_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_KEY);
-    }
-  }, [token]);
+    // Remove tokens left by the previous implementation; authentication now uses httpOnly cookies only.
+    localStorage.removeItem("accessToken");
+  }, []);
 
-  const fetchUser = async () => {
+  useEffect(() => {
+    const interceptorId = axios.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+        if (
+          error.response?.status !== 401
+          || originalRequest?._retry
+          || originalRequest?.skipAuthRefresh
+          || originalRequest?.url?.includes("/auth/refresh")
+        ) {
+          return Promise.reject(error);
+        }
+
+        originalRequest._retry = true;
+        try {
+          const { data } = await refreshAccessToken();
+          setToken(data.accessToken);
+          return axios(originalRequest);
+        } catch (refreshError) {
+          setToken(null);
+          setUser(null);
+          return Promise.reject(refreshError);
+        }
+      }
+    );
+    return () => axios.interceptors.response.eject(interceptorId);
+  }, []);
+
+  const fetchUser = async (retried = false) => {
     try {
-      const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const { data } = await authAxios.get("/auth/me", {
-        headers,
-      });
+      const { data } = await authAxios.get("/auth/me");
       setUser(data);
     } catch (err) {
-      console.error("Auth check failed", err);
+      if (err.response?.status === 401 && !retried) {
+        try {
+          const { data } = await refreshAccessToken();
+          setToken(data.accessToken);
+          return fetchUser(true);
+        } catch {
+          // The refresh token is missing, expired, or revoked; the user must log in again.
+        }
+      }
       setUser(null);
     } finally {
       setLoading(false);
@@ -43,7 +83,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     fetchUser();
-  }, [token]);
+  }, []);
 
   const login = async (email, password) => {
     try {

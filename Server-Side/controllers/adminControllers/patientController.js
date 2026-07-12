@@ -142,7 +142,7 @@ export const updatePatient = async(req,res)=>{
             id,
             req.body,
             {
-                new:true,
+                returnDocument: "after",
                 runValidators:true,
             }
         );
@@ -207,16 +207,42 @@ export const updateAppointment = async (req, res) => {
         const { id } = req.params;
         const { month, day } = req.body;
 
+        const monthIndex = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ].indexOf(month);
+        const dayNumber = Number(day);
+
+        if (monthIndex === -1 || !Number.isInteger(dayNumber) || dayNumber < 1 || dayNumber > 31) {
+            return res.status(400).json({
+                success: false,
+                message: "A valid appointment month and day are required"
+            });
+        }
+
+        const today = new Date();
+        let appointmentDate = new Date(today.getFullYear(), monthIndex, dayNumber);
+
+        // Reject invalid dates such as February 30 instead of allowing JavaScript to roll them over.
+        if (appointmentDate.getMonth() !== monthIndex || appointmentDate.getDate() !== dayNumber) {
+            return res.status(400).json({
+                success: false,
+                message: "The appointment date is invalid"
+            });
+        }
+
+        // A selected date earlier this year is the next occurrence in the following year.
+        if (appointmentDate < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+            appointmentDate = new Date(today.getFullYear() + 1, monthIndex, dayNumber);
+        }
+
         const patient = await User.findByIdAndUpdate(
             id,
             {
-                nextAppointment: {
-                    month,
-                    day
-                }
+                nextAppointment: appointmentDate
             },
             {
-                new: true
+                returnDocument: "after"
             }
         );
 
