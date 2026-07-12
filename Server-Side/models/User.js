@@ -1,7 +1,8 @@
 import mongoose from "mongoose";
 
-const photoSchema = new mongoose.Schema({
-  url: String,
+const gallerySchema = new mongoose.Schema({
+  imageUrl: String,
+  imagePublicId: String,
   month: String,
   uploadedAt: {
     type: Date,
@@ -14,19 +15,24 @@ const appointmentSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+
+  treatment: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Treatment",
+  },
+
   status: {
     type: String,
-    enum: ["UPCOMING", "COMPLETED", "MISSED"],
+    enum: ["UPCOMING", "COMPLETED", "MISSED", "CANCELLED"],
     default: "UPCOMING",
   },
+
   notes: String,
 });
 
 const userSchema = new mongoose.Schema(
   {
-    Firstname: { type: String, required: true },
-    Lastname: { type: String, required: true },
-
+    // Authentication
     email: {
       type: String,
       required: true,
@@ -44,23 +50,69 @@ const userSchema = new mongoose.Schema(
 
     role: {
       type: String,
-      enum: ["USER", "ADMIN"],
-      default: "USER",
+      enum: ["ADMIN", "PATIENT"],
+      default: "PATIENT",
     },
 
-    gallery: [photoSchema],
-
-    nextAppointment: {
-      type: Date,
+    // Personal Info
+    firstName: {
+      type: String,
+      required: true,
     },
+
+    lastName: {
+      type: String,
+      required: true,
+    },
+
+    phone: String,
+
+    dob: Date,
+
+    // Treatment
+    activeTreatment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Treatment",
+    },
+
+    treatmentStatus: {
+      type: String,
+      enum: ["ACTIVE", "COMPLETED", "MISSED"],
+      default: "ACTIVE",
+    },
+
+    currentMonthProgress: {
+      type: Number,
+      default: 0,
+    },
+
+    notes: String,
+
+    nextAppointment: Date,
 
     appointments: [appointmentSchema],
 
-    isVerified: { type: Boolean, default: false },
-    isBlocked: { type: Boolean, default: false },
-    loginAttempts: { type: Number, default: 0 },
+    gallery: [gallerySchema],
+
+    // Account
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
+
+    loginAttempts: {
+      type: Number,
+      default: 0,
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
 export default mongoose.model("User", userSchema);

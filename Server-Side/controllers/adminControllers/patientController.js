@@ -1,5 +1,5 @@
 import cloudinary from "../../configs/cloudinaryConfig.js";
-import Patient from "../../models/Patient.js";
+import User from "../../models/User.js";
 import mongoose from "mongoose";
 
 export const getAllPatients = async (req, res) => {
@@ -20,7 +20,7 @@ export const getAllPatients = async (req, res) => {
             query.status = status;
         }
 
-        const patients = await Patient.find(query).sort({ createdAt: -1 });
+        const patients = await User.find(query).sort({ createdAt: -1 });
 
         res.status(200).json({
             success: true,
@@ -59,7 +59,7 @@ export const createPatient = async (req, res) => {
             });
         }
 
-        const patient = await Patient.create({
+        const patient = await User.create({
             name: fullName,
             email,
             phone,
@@ -103,7 +103,7 @@ export const getPatientById = async (req, res) => {
             });
         }
 
-        const patient = await Patient.findById(id);
+        const patient = await User.findById(id);
 
         if (!patient) {
             return res.status(404).json({
@@ -136,7 +136,7 @@ export const updatePatient = async(req,res)=>{
             return res.status(400).json({success:false,message:"Invalid patient id"});
         }
 
-        const patient = await Patient.findByIdAndUpdate(
+        const patient = await User.findByIdAndUpdate(
             id,
             req.body,
             {
@@ -173,7 +173,7 @@ export const deletePatient = async (req, res) => {
             });
         }
 
-        const patient = await Patient.findByIdAndDelete(id);
+        const patient = await User.findByIdAndDelete(id);
 
         if (!patient) {
             return res.status(404).json({
@@ -205,7 +205,7 @@ export const updateAppointment = async (req, res) => {
         const { id } = req.params;
         const { month, day } = req.body;
 
-        const patient = await Patient.findByIdAndUpdate(
+        const patient = await User.findByIdAndUpdate(
             id,
             {
                 nextAppointment: {
@@ -250,17 +250,17 @@ export const getPatientStats = async (req, res) => {
 
     try {
 
-        const totalPatients = await Patient.countDocuments();
+        const totalPatients = await User.countDocuments();
 
-        const activePatients = await Patient.countDocuments({
+        const activePatients = await User.countDocuments({
             status: "Active"
         });
 
-        const completedPatients = await Patient.countDocuments({
+        const completedPatients = await User.countDocuments({
             status: "Completed"
         });
 
-        const missedPatients = await Patient.countDocuments({
+        const missedPatients = await User.countDocuments({
             status: "Missed"
         });
 
@@ -293,7 +293,7 @@ export const uploadGallery = async (req, res) => {
         const { id } = req.params;
         const { month } = req.body;
 
-        const patient = await Patient.findById(id);
+        const patient = await User.findById(id);
 
         if (!patient) {
             return res.status(404).json({
@@ -345,7 +345,7 @@ export const deleteGalleryImage = async (req, res) => {
 
         const { id, imageId } = req.params;
 
-        const patient = await Patient.findById(id);
+        const patient = await User.findById(id);
 
         if (!patient) {
             return res.status(404).json({

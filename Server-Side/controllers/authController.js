@@ -5,10 +5,13 @@ import RefreshToken from "../models/RefreshToken.js";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../utils/sendEmail.js";
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export const signup = async (req, res, next) => {
     try {
-        const { Firstname, Lastname, email, password, role } = req.body;
+        const { Firstname, Lastname, email, password} = req.body;
 
         if (!Firstname || !Lastname || !email || !password)
             return res.status(400).json({ message: "All fields are required" });
@@ -24,7 +27,7 @@ export const signup = async (req, res, next) => {
         const passwordHash = await bcrypt.hash(password, saltRounds);
 
         // Data to be encrypted in the token
-        const signupData = { Firstname, Lastname, email: email.toLowerCase().trim(), passwordHash, role: role || "USER" };
+        const signupData = { Firstname, Lastname, email: email.toLowerCase().trim(), passwordHash};
 
         // Create a temporary token that expires in 15 mins
         const verificationToken = jwt.sign(
@@ -65,6 +68,7 @@ export const signup = async (req, res, next) => {
             message: "Verification email sent. Please check your inbox to complete registration.",
         });
     } catch (error) {
+        console.error(error);
         return next(error);
     }
 };
@@ -84,7 +88,7 @@ export const VerifyEmail = async (req, res, next) => {
             return res.redirect(`${process.env.CLIENT_URL}/login?error=invalid_or_expired_link`);
         }
 
-        const { Firstname, Lastname, email, passwordHash, role } = decoded;
+        const { Firstname, Lastname, email, passwordHash } = decoded;
 
         // Final check if user was created while the token was pending
         const existingUser = await User.findOne({ email });
@@ -92,11 +96,10 @@ export const VerifyEmail = async (req, res, next) => {
 
         // Now creating the user in Database
         await User.create({
-            Firstname,
-            Lastname,
+            firstName:Firstname,
+            lastName: Lastname,
             email,
             passwordHash,
-            role,
             isVerified: true, // Mark as verified immediately
         });
 
