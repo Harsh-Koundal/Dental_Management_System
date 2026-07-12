@@ -72,7 +72,7 @@ const userSchema = new mongoose.Schema(
     // Treatment
     activeTreatment: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Treatment",
+      ref: "Treatments",
     },
 
     treatmentStatus: {

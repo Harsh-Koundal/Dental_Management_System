@@ -9,7 +9,6 @@ import {toast} from "react-toastify";
 import axios from "axios";
 
 
-const treatmentOptions = ["Teeth Whitening", "Dental Implants", "Invisalign", "Root Canal", "Veneers", "Gum Contouring"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS = Array.from({ length: 31 }, (_, i) => i + 1);
 const YEARS = Array.from({ length: 6 }, (_, i) => 2020 + i);
@@ -25,6 +24,8 @@ const API = `${import.meta.env.VITE_BACKEND_BASE_URL}/admin/patient`;
 const patientIdOf = (patient) => patient?._id || patient?.id;
 const patientName = (patient) => `${patient?.firstName || ""} ${patient?.lastName || ""}`.trim() || "Unnamed patient";
 const galleryImageUrl = (image) => image.imageUrl || image.url;
+const treatmentName = (treatment) => typeof treatment === "object" ? treatment?.name || "No treatment" : treatment || "No treatment";
+const treatmentId = (treatment) => typeof treatment === "object" ? treatment?._id || "" : treatment || "";
 const appointmentParts = (appointment) => {
   if (appointment && typeof appointment === "object" && !(appointment instanceof Date) && appointment.month) {
     return { month: appointment.month, day: String(appointment.day || "") };
@@ -411,7 +412,7 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
           <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Patient Profile</p>
           <p className="text-sm font-black text-slate-900 leading-tight">{patient.firstName} {patient.lastName}</p>
         </div>
-        <StatusBadge status={patient.status} />
+        <StatusBadge status={patient.treatmentStatus} />
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
@@ -438,7 +439,7 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
                   {[
                     { icon: <Mail size={14} className="text-teal-500" />, label: "Email", val: patient.email },
                     { icon: <Phone size={14} className="text-teal-500" />, label: "Phone", val: patient.phone },
-                    { icon: <Activity size={14} className="text-teal-500" />, label: "Treatment", val: patient.activeTreatment },
+                    { icon: <Activity size={14} className="text-teal-500" />, label: "Treatment", val: treatmentName(patient.activeTreatment) },
                     { icon: <Calendar size={14} className="text-teal-500" />, label: "Next Appointment", val: patient.nextAppointment ? fmtDate(patient.nextAppointment) : "Not scheduled" },
                   ].map(({ icon, label, val }) => (
                     <div key={label} className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-2.5">
@@ -515,7 +516,7 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
                       </div>
                     </div>
                     <div>
-                      <p className="text-slate-700 font-bold text-sm">{patient.activeTreatment}</p>
+                      <p className="text-slate-700 font-bold text-sm">{treatmentName(patient.activeTreatment)}</p>
                       <p className="text-slate-500 text-xs mt-1">
                         {patient.currentMonthProgress === 100
                           ? "Treatment complete ✓"
@@ -585,7 +586,7 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
         </div>
       )}
       <div className="absolute top-3 right-3">
-        <StatusBadge status={patient.status} />
+        <StatusBadge status={patient.treatmentStatus} />
       </div>
       {/* Gallery count badge */}
       {(patient.gallery || []).length > 0 && (
@@ -609,7 +610,7 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
         </div>
         <div className="flex items-center gap-2 text-xs">
           <Activity size={11} className="text-teal-400 flex-shrink-0" />
-          <span className="font-semibold text-slate-700">{patient.activeTreatment}</span>
+          <span className="font-semibold text-slate-700">{treatmentName(patient.activeTreatment)}</span>
         </div>
       </div>
 
@@ -656,9 +657,9 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
 );
 
 // ─── Edit/Add Modal (compact) ─────────────────────────────────────────────────
-const PatientModal = ({ patient, onClose, onSave }) => {
+const PatientModal = ({ patient, treatments, onClose, onSave }) => {
   const [form, setForm] = useState(patient || {
-    firstName: "", lastName: "", email: "", phone: "", activeTreatment: treatmentOptions[0],
+    firstName: "", lastName: "", email: "", phone: "", activeTreatment: "",
     status: "Active", avatar: null, currentMonthProgress: 0, dob: "", notes: "",
     nextAppointment: { month: "", day: "" }
   });
@@ -686,17 +687,18 @@ const PatientModal = ({ patient, onClose, onSave }) => {
           ))}
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Active Treatment</label>
-            <select value={form.activeTreatment} onChange={(e) => setForm((f) => ({ ...f, activeTreatment: e.target.value }))}
+            <select value={treatmentId(form.activeTreatment)} onChange={(e) => setForm((f) => ({ ...f, activeTreatment: e.target.value }))}
               className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition appearance-none">
-              {treatmentOptions.map((t) => <option key={t}>{t}</option>)}
+              <option value="">Select a treatment</option>
+              {treatments.filter((t) => t.active).map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
             </select>
           </div>
           <div>
             <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Status</label>
             <div className="flex gap-2">
-              {["Active","Completed","Missed"].map((s) => (
+              {["ACTIVE","COMPLETED","MISSED"].map((s) => (
                 <button key={s} onClick={() => setForm((f) => ({ ...f, status: s }))}
-                  className={`flex-1 rounded-2xl px-3 py-2 text-xs font-bold transition ${form.status === s ? (s === "Active" ? "bg-emerald-500 text-white" : s === "Completed" ? "bg-sky-500 text-white" : "bg-rose-500 text-white") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                  className={`flex-1 rounded-2xl px-3 py-2 text-xs font-bold transition ${form.status === s ? (s === "ACTIVE" ? "bg-emerald-500 text-white" : s === "COMPLETED" ? "bg-sky-500 text-white" : "bg-rose-500 text-white") : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
                   {s}
                 </button>
               ))}
@@ -736,7 +738,7 @@ const PatientModal = ({ patient, onClose, onSave }) => {
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
           <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
-          <button onClick={() => { if (form.firstName.trim() && form.lastName.trim() && form.phone.trim()) { onSave(form); } else { toast.error("First name, last name, and phone are required."); } }}
+          <button onClick={() => { if (form.firstName.trim() && form.lastName.trim() && form.phone.trim() && treatmentId(form.activeTreatment)) { onSave(form); } else { toast.error("First name, last name, phone, and treatment are required."); } }}
             className="rounded-2xl bg-teal-500 hover:bg-teal-600 text-white px-5 py-2 text-sm font-bold transition shadow-md shadow-teal-100">
             {patient ? "Save Changes" : "Create Patient"}
           </button>
@@ -751,6 +753,7 @@ const PatientModal = ({ patient, onClose, onSave }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
   const [patients, setPatients] = useState([]);
+  const [treatments, setTreatments] = useState([]);
   const [route, setRoute] = useState(null);
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("");
@@ -761,7 +764,7 @@ export default function App() {
     const q = search.toLowerCase();
     const match = patientName(p).toLowerCase().includes(q)
       || (p.email || "").toLowerCase().includes(q)
-      || String(p.activeTreatment || "").toLowerCase().includes(q);
+      || treatmentName(p.activeTreatment).toLowerCase().includes(q);
     if (filter === "active") return match && p.status === "Active";
     if (filter === "completed") return match && p.status === "Completed";
     if (filter === "missed") return match && p.status === "Missed";
@@ -774,6 +777,7 @@ const fetchPatients = async () => {
     setLoading(true);
     try {
         const res = await axios.get(API, { withCredentials: true });
+        console.log(res.data)
         setPatients(res.data.patients);
     } catch (err) {
         toast.error("Failed to fetch patients");
@@ -784,6 +788,20 @@ const fetchPatients = async () => {
 
 useEffect(() => {
     fetchPatients();
+}, []);
+
+useEffect(() => {
+  const fetchTreatments = async () => {
+    try {
+      const { data } = await axios.get(`${import.meta.env.VITE_BACKEND_BASE_URL}/admin/treatment`, {
+        withCredentials: true,
+      });
+      setTreatments(data.treatments || []);
+    } catch (error) {
+      toast.error("Failed to fetch treatments");
+    }
+  };
+  fetchTreatments();
 }, []);
 
   const handleSave = async (form) => {
@@ -843,8 +861,8 @@ useEffect(() => {
         {/* Stats */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
           <StatCard label="Total Patients" value={patients.length} icon={<Users size={20} className="text-sky-600" />} color={{ border: "border-slate-200", bg: "bg-sky-50" }} />
-          <StatCard label="Active" value={patients.filter(p=>p.status==="Active").length} icon={<CheckCircle size={20} className="text-emerald-600" />} color={{ border: "border-slate-200", bg: "bg-emerald-50" }} />
-          <StatCard label="Completed" value={patients.filter(p=>p.status==="Completed").length} icon={<Clock size={20} className="text-violet-600" />} color={{ border: "border-slate-200", bg: "bg-violet-50" }} />
+          <StatCard label="Active" value={patients.filter(p=>p.treatmentStatus==="ACTIVE").length} icon={<CheckCircle size={20} className="text-emerald-600" />} color={{ border: "border-slate-200", bg: "bg-emerald-50" }} />
+          <StatCard label="Completed" value={patients.filter(p=>p.treatmentStatus==="COMPLETED").length} icon={<Clock size={20} className="text-violet-600" />} color={{ border: "border-slate-200", bg: "bg-violet-50" }} />
           <StatCard label="Showing" value={filtered.length} icon={<Eye size={20} className="text-amber-600" />} color={{ border: "border-slate-200", bg: "bg-amber-50" }} />
         </div>
 
@@ -892,8 +910,8 @@ useEffect(() => {
         )}
       </div>
 
-      {modal === "add" && <PatientModal patient={null} onClose={()=>setModal(null)} onSave={handleSave} />}
-      {modal?.type === "edit" && <PatientModal patient={modal.patient} onClose={()=>setModal(null)} onSave={handleSave} />}
-    </div>
+      {modal === "add" && <PatientModal patient={null} treatments={treatments} onClose={()=>setModal(null)} onSave={handleSave} />}
+      {modal?.type === "edit" && <PatientModal patient={modal.patient} treatments={treatments} onClose={()=>setModal(null)} onSave={handleSave} />}
+     </div>
   );
 }

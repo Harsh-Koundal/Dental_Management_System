@@ -20,7 +20,9 @@ export const getAllPatients = async (req, res) => {
             query.status = status;
         }
 
-        const patients = await User.find(query).sort({ createdAt: -1 });
+        const patients = await User.find(query)
+            .populate("activeTreatment", "name")
+            .sort({ createdAt: -1 });
 
         res.status(200).json({
             success: true,
@@ -66,7 +68,7 @@ export const createPatient = async (req, res) => {
             email,
             phone,
             activeTreatment,
-            status,
+            treatmentStatus:status,
             notes,
             dob,
             currentMonthProgress: currentMonthProgress || 0,
@@ -105,7 +107,7 @@ export const getPatientById = async (req, res) => {
             });
         }
 
-        const patient = await User.findById(id);
+        const patient = await User.findById(id).populate("activeTreatment", "name");
 
         if (!patient) {
             return res.status(404).json({
@@ -140,7 +142,11 @@ export const updatePatient = async(req,res)=>{
 
         const patient = await User.findByIdAndUpdate(
             id,
-            req.body,
+            {
+
+                ...req.body,
+                treatmentStatus:req.body.status?.toUpperCase(),
+            },
             {
                 returnDocument: "after",
                 runValidators:true,
@@ -150,6 +156,8 @@ export const updatePatient = async(req,res)=>{
         if(!patient){
             return res.status(404).json({sucess:false,message:"Patient not found"});
         }
+
+        await patient.populate("activeTreatment", "name");
 
         res.status(200).json({sucess:true,message:"Patient updated successfully",patient});
     }catch(err){
