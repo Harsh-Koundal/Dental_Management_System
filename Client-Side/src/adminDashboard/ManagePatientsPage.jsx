@@ -5,16 +5,9 @@ import {
   Upload, Calendar, Trash, ImageIcon, Filter, ZoomIn, ChevronDown,
   Image, Star, Download, Users, AlertTriangle
 } from "lucide-react";
+import {toast} from "react-toastify";
+import axios from "axios";
 
-// ─── Shared Data ──────────────────────────────────────────────────────────────
-const initialPatients = [
-  { id: 1, name: "Sarah Johnson", email: "sarah.johnson@email.com", phone: "+1 (555) 234-5678", activeTreatment: "Teeth Whitening", status: "Active", avatar: null, currentMonthProgress: 75, dob: "1990-04-12", notes: "Sensitive gums, use gentle whitening formula.", nextAppointmentMonth: "", nextAppointmentDay: "" },
-  { id: 2, name: "Michael Chen", email: "m.chen@email.com", phone: "+1 (555) 876-5432", activeTreatment: "Dental Implants", status: "Active", avatar: null, currentMonthProgress: 40, dob: "1985-11-03", notes: "Post-op check every 3 months.", nextAppointmentMonth: "", nextAppointmentDay: "" },
-  { id: 3, name: "Emily Davis", email: "emily.d@email.com", phone: "+1 (555) 345-6789", activeTreatment: "Invisalign", status: "Completed", avatar: null, currentMonthProgress: 100, dob: "1998-07-22", notes: "Retainer required nightly.", nextAppointmentMonth: "", nextAppointmentDay: "" },
-  { id: 4, name: "Robert Martinez", email: "robert.m@email.com", phone: "+1 (555) 654-3210", activeTreatment: "Root Canal", status: "Missed", avatar: null, currentMonthProgress: 20, dob: "1976-01-30", notes: "Needs reminder calls.", nextAppointmentMonth: "", nextAppointmentDay: "" },
-  { id: 5, name: "Aisha Patel", email: "aisha.p@email.com", phone: "+1 (555) 789-0123", activeTreatment: "Veneers", status: "Active", avatar: null, currentMonthProgress: 60, dob: "1993-09-15", notes: "Upper arch only.", nextAppointmentMonth: "", nextAppointmentDay: "" },
-  { id: 6, name: "James Wilson", email: "j.wilson@email.com", phone: "+1 (555) 012-3456", activeTreatment: "Gum Contouring", status: "Completed", avatar: null, currentMonthProgress: 100, dob: "1982-06-08", notes: "Follow-up aesthetic review pending.", nextAppointmentMonth: "", nextAppointmentDay: "" },
-];
 
 const treatmentOptions = ["Teeth Whitening", "Dental Implants", "Invisalign", "Root Canal", "Veneers", "Gum Contouring"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -28,6 +21,10 @@ const currentMonthLabel = () => {
 };
 
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+const API = `${import.meta.env.VITE_BACKEND_BASE_URL}/admin/patient`;
+const patientIdOf = (patient) => patient?._id || patient?.id;
+const patientName = (patient) => `${patient?.firstName || ""} ${patient?.lastName || ""}`.trim() || "Unnamed patient";
+const galleryImageUrl = (image) => image.imageUrl || image.url;
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
@@ -48,11 +45,12 @@ const StatusBadge = ({ status }) => {
 // ─── UPLOAD MODAL ─────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 const UploadModal = ({ onClose, onSave }) => {
-  const [files, setFiles] = useState([]);   // [{ preview, month, year }]
+  const [files, setFiles] = useState([]);   // [{ file, preview, month, year }]
   const [dragOver, setDragOver] = useState(false);
 
   const addFiles = (rawFiles) => {
     const newItems = Array.from(rawFiles).map((f) => ({
+      file: f,
       preview: URL.createObjectURL(f),
       month: MONTHS[new Date().getMonth()],
       year: new Date().getFullYear(),
@@ -74,12 +72,7 @@ const UploadModal = ({ onClose, onSave }) => {
 
   const handleSave = () => {
     if (!files.length) return;
-    const images = files.map((f) => ({
-      url: f.preview,
-      month: `${f.month} ${f.year}`,
-      uploadedAt: new Date(),
-    }));
-    onSave(images);
+    onSave(files);
   };
 
   return (
@@ -251,7 +244,7 @@ const GallerySection = ({ images, onDelete, onUpload }) => {
               >
                 {/* Image */}
                 <div className="aspect-square overflow-hidden bg-slate-100 cursor-zoom-in" onClick={() => setLightbox(img)}>
-                  <img src={img.url} alt={img.month} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                  <img src={galleryImageUrl(img)} alt={img.month} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                 </div>
 
                 {/* Current month ribbon */}
@@ -308,7 +301,7 @@ const GallerySection = ({ images, onDelete, onUpload }) => {
             <button onClick={() => setLightbox(null)} className="absolute -top-12 right-0 text-white/70 hover:text-white transition p-2">
               <X size={24} />
             </button>
-            <img src={lightbox.url} alt="" className="w-full rounded-3xl shadow-2xl max-h-[80vh] object-contain" />
+            <img src={galleryImageUrl(lightbox)} alt="" className="w-full rounded-3xl shadow-2xl max-h-[80vh] object-contain" />
             <div className="mt-4 text-center">
               <p className="text-white font-bold">{lightbox.month}</p>
               <p className="text-white/50 text-sm">Uploaded {fmtDate(lightbox.uploadedAt)}</p>
@@ -327,24 +320,28 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
   const [showUpload, setShowUpload] = useState(false);
   const [appointmentMonth, setAppointmentMonth] = useState("");
   const [appointmentDay, setAppointmentDay] = useState("");
-  const patient = patients.find((p) => p.id === patientId);
+  const patient = patients.find((p) => patientIdOf(p) === patientId);
 
   useEffect(() => {
     if (patient) {
-      setAppointmentMonth(patient.nextAppointmentMonth || "");
-      setAppointmentDay(patient.nextAppointmentDay || "");
+      setAppointmentMonth(patient.nextAppointment?.month || "");
+      setAppointmentDay(patient.nextAppointment?.day || "");
     }
   }, [patient]);
 
-  const handleSaveAppointment = () => {
+  const handleSaveAppointment = async () => {
     if (!patient) return;
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === patient.id
-          ? { ...p, nextAppointmentMonth: appointmentMonth, nextAppointmentDay: appointmentDay }
-          : p
-      )
-    );
+    try {
+      const { data } = await axios.patch(
+        `${API}/${patientIdOf(patient)}/appointment`,
+        { month: appointmentMonth, day: appointmentDay },
+        { withCredentials: true }
+      );
+      setPatients((prev) => prev.map((p) => patientIdOf(p) === patientIdOf(patient) ? data.patient : p));
+      toast.success(data.message || "Appointment updated successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to update appointment");
+    }
   };
 
   if (!patient) return (
@@ -356,23 +353,34 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
 
   const images = patient.gallery || [];
 
-  const handleSaveImages = (newImgs) => {
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === patient.id ? { ...p, gallery: [...(p.gallery || []), ...newImgs] } : p
-      )
-    );
-    setShowUpload(false);
+  const handleSaveImages = async (newImages) => {
+    try {
+      let gallery = patient.gallery || [];
+      for (const image of newImages) {
+        const formData = new FormData();
+        formData.append("image", image.file);
+        formData.append("month", `${image.month} ${image.year}`);
+        const { data } = await axios.post(`${API}/${patientIdOf(patient)}/gallery`, formData, { withCredentials: true });
+        gallery = data.gallery;
+      }
+      setPatients((prev) => prev.map((p) => patientIdOf(p) === patientIdOf(patient) ? { ...p, gallery } : p));
+      toast.success("Images uploaded successfully");
+      setShowUpload(false);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to upload images");
+    }
   };
 
-  const handleDeleteImage = (img) => {
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === patient.id
-          ? { ...p, gallery: (p.gallery || []).filter((g) => g !== img) }
-          : p
-      )
-    );
+  const handleDeleteImage = async (image) => {
+    try {
+      await axios.delete(`${API}/${patientIdOf(patient)}/gallery/${image._id}`, { withCredentials: true });
+      setPatients((prev) => prev.map((p) => patientIdOf(p) === patientIdOf(patient)
+        ? { ...p, gallery: (p.gallery || []).filter((item) => item._id !== image._id) }
+        : p));
+      toast.success("Image deleted successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete image");
+    }
   };
 
   const progressColor = patient.currentMonthProgress === 100 ? "#0ea5e9" : patient.currentMonthProgress >= 50 ? "#10b981" : "#f59e0b";
@@ -391,7 +399,7 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
         <div className="h-5 w-px bg-slate-200" />
         <div>
           <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Patient Profile</p>
-          <p className="text-sm font-black text-slate-900 leading-tight">{patient.name}</p>
+          <p className="text-sm font-black text-slate-900 leading-tight">{patient.firstName} {patient.lastName}</p>
         </div>
         <StatusBadge status={patient.status} />
       </div>
@@ -413,15 +421,15 @@ const PatientProfile = ({ patientId, patients, setPatients, onBack }) => {
             <div className="grid md:grid-cols-2 gap-8 mt-5">
               {/* Left: Info */}
               <div>
-                <h2 className="text-2xl font-black text-slate-900 tracking-tight">{patient.name}</h2>
-                <p className="text-slate-500 text-sm mt-0.5 mb-5">Patient ID #{patient.id.toString().padStart(4, "0")}</p>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">{patientName(patient)}</h2>
+                <p className="text-slate-500 text-sm mt-0.5 mb-5">Patient ID #{patientIdOf(patient)}</p>
 
                 <div className="space-y-3">
                   {[
                     { icon: <Mail size={14} className="text-teal-500" />, label: "Email", val: patient.email },
                     { icon: <Phone size={14} className="text-teal-500" />, label: "Phone", val: patient.phone },
                     { icon: <Activity size={14} className="text-teal-500" />, label: "Treatment", val: patient.activeTreatment },
-                    { icon: <Calendar size={14} className="text-teal-500" />, label: "Next Appointment", val: patient.nextAppointmentMonth && patient.nextAppointmentDay ? `${patient.nextAppointmentMonth} ${patient.nextAppointmentDay}` : "Not scheduled" },
+                    { icon: <Calendar size={14} className="text-teal-500" />, label: "Next Appointment", val: patient.nextAppointment?.month && patient.nextAppointment?.day ? `${patient.nextAppointment.month} ${patient.nextAppointment.day}` : "Not scheduled" },
                   ].map(({ icon, label, val }) => (
                     <div key={label} className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-2.5">
                       <div className="h-8 w-8 rounded-xl bg-teal-50 flex items-center justify-center flex-shrink-0">{icon}</div>
@@ -554,13 +562,13 @@ const StatCard = ({ label, value, icon, color }) => (
 const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
   <div
     className="group relative flex flex-col rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-xl cursor-pointer"
-    onClick={() => onClick(patient.id)}
+    onClick={() => onClick(patientIdOf(patient))}
     style={{ fontFamily: "'DM Sans', sans-serif" }}
   >
     {/* Avatar / color header */}
     <div className="h-40 bg-gradient-to-br from-slate-100 to-teal-50 flex items-center justify-center relative overflow-hidden">
       {patient.avatar ? (
-        <img src={patient.avatar} alt={patient.name} className="w-full h-full object-cover" />
+        <img src={patient.avatar} alt={patientName(patient)} className="w-full h-full object-cover" />
       ) : (
         <div className="h-20 w-20 rounded-3xl bg-white shadow-md flex items-center justify-center border border-slate-200">
           <User size={36} className="text-teal-400" />
@@ -579,7 +587,7 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
     </div>
 
     <div className="p-5 flex flex-col flex-1 gap-2.5">
-      <h4 className="font-black text-slate-900 text-sm">{patient.name}</h4>
+      <h4 className="font-black text-slate-900 text-sm">{patientName(patient)}</h4>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <Mail size={11} className="text-slate-400 flex-shrink-0" />
@@ -615,7 +623,7 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
       {/* Action row */}
       <div className="flex items-center gap-2 mt-2 pt-3 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
         <button
-          onClick={(e) => { e.stopPropagation(); onClick(patient.id); }}
+          onClick={(e) => { e.stopPropagation(); onClick(patientIdOf(patient)); }}
           className="flex items-center gap-1.5 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 px-3 py-1.5 text-xs font-bold transition"
         >
           <Eye size={11} />View
@@ -627,7 +635,7 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
           <Pencil size={11} />Edit
         </button>
         <button
-          onClick={(e) => { e.stopPropagation(); onDelete(patient.id); }}
+          onClick={(e) => { e.stopPropagation(); onDelete(patientIdOf(patient)); }}
           className="flex items-center gap-1.5 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-100 px-3 py-1.5 text-xs font-bold transition ml-auto"
         >
           <Trash2 size={11} />
@@ -640,9 +648,9 @@ const PatientCard = ({ patient, onClick, onEdit, onDelete }) => (
 // ─── Edit/Add Modal (compact) ─────────────────────────────────────────────────
 const PatientModal = ({ patient, onClose, onSave }) => {
   const [form, setForm] = useState(patient || {
-    name: "", email: "", phone: "", activeTreatment: treatmentOptions[0],
+    firstName: "", lastName: "", email: "", phone: "", activeTreatment: treatmentOptions[0],
     status: "Active", avatar: null, currentMonthProgress: 0, dob: "", notes: "",
-    nextAppointmentMonth: "", nextAppointmentDay: ""
+    nextAppointment: { month: "", day: "" }
   });
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -653,7 +661,8 @@ const PatientModal = ({ patient, onClose, onSave }) => {
         </div>
         <div className="px-6 py-5 space-y-3 max-h-[65vh] overflow-y-auto">
           {[
-            { label: "Full Name", key: "name", type: "text", placeholder: "Sarah Johnson" },
+            { label: "First Name", key: "firstName", type: "text", placeholder: "Sarah" },
+            { label: "Last Name", key: "lastName", type: "text", placeholder: "Johnson" },
             { label: "Email", key: "email", type: "email", placeholder: "patient@email.com" },
             { label: "Phone", key: "phone", type: "tel", placeholder: "+1 (555) 123-4567" },
           ].map(({ label, key, type, placeholder }) => (
@@ -687,8 +696,8 @@ const PatientModal = ({ patient, onClose, onSave }) => {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <select
-                  value={form.nextAppointmentMonth}
-                  onChange={(e) => setForm((f) => ({ ...f, nextAppointmentMonth: e.target.value }))}
+                  value={form.nextAppointment?.month || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, nextAppointment: { ...f.nextAppointment, month: e.target.value } }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition appearance-none"
                 >
                   <option value="">Month</option>
@@ -697,8 +706,8 @@ const PatientModal = ({ patient, onClose, onSave }) => {
               </div>
               <div>
                 <select
-                  value={form.nextAppointmentDay}
-                  onChange={(e) => setForm((f) => ({ ...f, nextAppointmentDay: e.target.value }))}
+                  value={form.nextAppointment?.day || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, nextAppointment: { ...f.nextAppointment, day: e.target.value } }))}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 transition appearance-none"
                 >
                   <option value="">Day</option>
@@ -716,7 +725,7 @@ const PatientModal = ({ patient, onClose, onSave }) => {
         </div>
         <div className="flex justify-end gap-3 border-t border-slate-100 px-6 py-4">
           <button onClick={onClose} className="rounded-2xl border border-slate-200 px-5 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
-          <button onClick={() => { if (form.name.trim()) { onSave(form); } }}
+          <button onClick={() => { if (form.firstName.trim() && form.lastName.trim() && form.phone.trim()) { onSave(form); } else { toast.error("First name, last name, and phone are required."); } }}
             className="rounded-2xl bg-teal-500 hover:bg-teal-600 text-white px-5 py-2 text-sm font-bold transition shadow-md shadow-teal-100">
             {patient ? "Save Changes" : "Create Patient"}
           </button>
@@ -730,28 +739,68 @@ const PatientModal = ({ patient, onClose, onSave }) => {
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 export default function App() {
-  const [patients, setPatients] = useState(initialPatients);
-  const [route, setRoute] = useState(null);   // null = list, number = patient id
+  const [patients, setPatients] = useState([]);
+  const [route, setRoute] = useState(null);
+  const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [modal, setModal] = useState(null);
 
   const filtered = patients.filter((p) => {
     const q = search.toLowerCase();
-    const match = p.name.toLowerCase().includes(q) || p.email.toLowerCase().includes(q) || p.activeTreatment.toLowerCase().includes(q);
+    const match = patientName(p).toLowerCase().includes(q)
+      || (p.email || "").toLowerCase().includes(q)
+      || String(p.activeTreatment || "").toLowerCase().includes(q);
     if (filter === "active") return match && p.status === "Active";
     if (filter === "completed") return match && p.status === "Completed";
     if (filter === "missed") return match && p.status === "Missed";
     return match;
   });
 
-  const handleSave = (form) => {
-    if (modal === "add") {
-      setPatients((prev) => [{ ...form, id: Date.now(), gallery: [] }, ...prev]);
-    } else if (modal?.type === "edit") {
-      setPatients((prev) => prev.map((p) => p.id === modal.patient.id ? { ...p, ...form } : p));
+
+
+const fetchPatients = async () => {
+    setLoading(true);
+    try {
+        const res = await axios.get(API, { withCredentials: true });
+        setPatients(res.data.patients);
+    } catch (err) {
+        toast.error("Failed to fetch patients");
+    } finally {
+        setLoading(false);
     }
-    setModal(null);
+};
+
+useEffect(() => {
+    fetchPatients();
+}, []);
+
+  const handleSave = async (form) => {
+    try {
+      if (modal === "add") {
+        const { data } = await axios.post(API, form, { withCredentials: true });
+        setPatients((prev) => [data.patient, ...prev]);
+        toast.success(data.message || "Patient created successfully");
+      } else if (modal?.type === "edit") {
+        const { data } = await axios.put(`${API}/${patientIdOf(modal.patient)}`, form, { withCredentials: true });
+        setPatients((prev) => prev.map((p) => patientIdOf(p) === patientIdOf(data.patient) ? data.patient : p));
+        toast.success(data.message || "Patient updated successfully");
+      }
+      setModal(null);
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save patient");
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this patient? This action cannot be undone.")) return;
+    try {
+      const { data } = await axios.delete(`${API}/${id}`, { withCredentials: true });
+      setPatients((prev) => prev.filter((patient) => patientIdOf(patient) !== id));
+      toast.success(data.message || "Patient deleted successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to delete patient");
+    }
   };
 
   // ── Profile Route ──
@@ -821,11 +870,11 @@ export default function App() {
           <div className="grid gap-5 xl:grid-cols-3 lg:grid-cols-2">
             {filtered.map((p) => (
               <PatientCard
-                key={p.id}
+                key={patientIdOf(p)}
                 patient={p}
                 onClick={(id) => setRoute(id)}
                 onEdit={(p) => setModal({ type: "edit", patient: p })}
-                onDelete={(id) => setPatients((prev) => prev.filter((p) => p.id !== id))}
+                onDelete={handleDelete}
               />
             ))}
           </div>

@@ -1,1 +1,0 @@
-import Patient from "../../models/Patient.js";

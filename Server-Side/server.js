@@ -54,6 +54,8 @@ app.get("/", (req, res) => {
 // Routes
 app.use("/api/auth",authRoute);
 app.use("/api/admin",adminSettingRoutes);
+
+// Admin Routes
 app.use("/api/admin/dashboard",adminDashboardRoutes);
 app.use("/api/admin/treatment",adminTreatmentRoutes);
 app.use("/api/admin/patient",adminPatientRoute);

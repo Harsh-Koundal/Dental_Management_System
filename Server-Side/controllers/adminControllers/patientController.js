@@ -6,7 +6,7 @@ export const getAllPatients = async (req, res) => {
     try {
         const { search, status } = req.query;
 
-        let query = {};
+        let query = {role:"PATIENT"};
 
         if (search) {
             query.$or = [
@@ -41,7 +41,8 @@ export const getAllPatients = async (req, res) => {
 export const createPatient = async (req, res) => {
     try {
         const {
-            fullName,
+            firstName,
+            lastName,
             email,
             phone,
             activeTreatment,
@@ -52,7 +53,7 @@ export const createPatient = async (req, res) => {
             dob
         } = req.body;
 
-        if (!fullName || !phone || !activeTreatment || !status) {
+        if (!firstName || !lastName || !phone || !activeTreatment || !status) {
             return res.status(400).json({
                 success: false,
                 message: "Full name, phone, active treatment and status are required."
@@ -60,7 +61,8 @@ export const createPatient = async (req, res) => {
         }
 
         const patient = await User.create({
-            name: fullName,
+            firstName,
+            lastName,
             email,
             phone,
             activeTreatment,
