@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Search, Plus, Pencil, Trash2, X, Upload, CheckCircle, XCircle, LayoutGrid, Eye, Users } from "lucide-react";
+import { Search, Plus, Pencil, Trash2, X, Upload, CheckCircle, XCircle, LayoutGrid, Eye, Users, FileLineChart, Loader2 } from "lucide-react";
 import axios from "axios";
 import { toast } from "react-toastify";
+
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({ label, value, icon }) => (
@@ -37,8 +38,8 @@ const TreatmentCard = ({ treatment, onEdit, onDelete }) => (
         <h4 className="text-sm font-bold text-slate-900 leading-snug">{treatment.name}</h4>
         <span
           className={`shrink-0 mt-0.5 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide ${treatment.active
-              ? "bg-emerald-100 text-emerald-700"
-              : "bg-slate-100 text-slate-500"
+            ? "bg-emerald-100 text-emerald-700"
+            : "bg-slate-100 text-slate-500"
             }`}
         >
           {treatment.active ? "Active" : "Inactive"}
@@ -68,26 +69,27 @@ const TreatmentCard = ({ treatment, onEdit, onDelete }) => (
 );
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
-const TreatmentModal = ({ treatment, onClose, onSave }) => {
+const TreatmentModal = ({ treatment, onClose, onSave, isSaving }) => {
   const [form, setForm] = useState(
     treatment || { name: "", description: "", image: null, active: true }
   );
   const [preview, setPreview] = useState(treatment?.image || null);
+  
 
-const handleImageChange = (e) => {
-  const file = e.target.files[0];
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
 
-  if (!file) return;
+    if (!file) return;
 
-  const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
 
-  setPreview(url);
+    setPreview(url);
 
-  setForm((f) => ({
-    ...f,
-    image: file,
-  }));
-};
+    setForm((f) => ({
+      ...f,
+      image: file,
+    }));
+  };
 
   const handleSubmit = () => {
     if (!form.name.trim()) return;
@@ -180,9 +182,20 @@ const handleImageChange = (e) => {
           </button>
           <button
             onClick={handleSubmit}
-            className="rounded-2xl bg-sky-500 px-5 py-2 text-sm font-semibold text-white hover:bg-sky-600 transition"
+            disabled={isSaving}
+            className="flex items-center justify-center gap-2 rounded-2xl bg-sky-500 px-5 py-2 text-sm font-semibold text-white hover:bg-sky-600 transition disabled:bg-sky-300 disabled:cursor-not-allowed"
           >
-            {treatment ? "Save Changes" : "+ Add Treatment"}
+            {isSaving && (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
+
+            {isSaving
+              ? treatment
+                ? "Saving..."
+                : "Adding..."
+              : treatment
+                ? "Save Changes"
+                : "+ Add Treatment"}
           </button>
         </div>
       </div>
@@ -227,25 +240,31 @@ const TreatmentsPage = () => {
 
   const totalActive = treatments.filter((t) => t.active).length;
   const totalInactive = treatments.filter((t) => !t.active).length;
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async (form) => {
+    if (isSaving) return;
+
+    setIsSaving(true);
     try {
+
+
       const formData = new FormData();
 
-      formData.append("name",form.name);
-      formData.append("description",form.description);
-      formData.append("active",form.active);
+      formData.append("name", form.name);
+      formData.append("description", form.description);
+      formData.append("active", form.active);
 
       if (form.image instanceof File) {
-  formData.append("image", form.image);
-}
+        formData.append("image", form.image);
+      }
 
       if (modal === "add") {
-        const res = await axios.post(`${import.meta.env.VITE_BACKEND_BASE_URL}/admin/treatment/create`,formData
+        const res = await axios.post(`${import.meta.env.VITE_BACKEND_BASE_URL}/admin/treatment/create`, formData
           , {
             withCredentials: true,
-            headers:{
-              "Content-Type":"multipart/form-data",
+            headers: {
+              "Content-Type": "multipart/form-data",
             }
           });
 
@@ -261,10 +280,10 @@ const TreatmentsPage = () => {
           formData,
           {
             withCredentials: true,
-            headers:{
-              "Content-Type":"multipart/form-data"
+            headers: {
+              "Content-Type": "multipart/form-data"
+            }
           }
-        }
         );
 
         setTreatments((prev) =>
@@ -282,29 +301,31 @@ const TreatmentsPage = () => {
       console.log(err);
 
       toast.error("Something went wrong");
+    } finally {
+      setIsSaving(false);
     }
   }
 
- const handleDelete = async (id) => {
-  try {
-    await axios.delete(
-      `${import.meta.env.VITE_BACKEND_BASE_URL}/admin/treatment/delete/${id}`,
-      {
-        withCredentials: true,
-      }
-    );
+  const handleDelete = async (id) => {
+    try {
+      await axios.delete(
+        `${import.meta.env.VITE_BACKEND_BASE_URL}/admin/treatment/delete/${id}`,
+        {
+          withCredentials: true,
+        }
+      );
 
-    setTreatments((prev) =>
-      prev.filter((t) => t._id !== id)
-    );
+      setTreatments((prev) =>
+        prev.filter((t) => t._id !== id)
+      );
 
-    toast.success("Treatment deleted");
-  } catch (error) {
-    console.log(error);
+      toast.success("Treatment deleted");
+    } catch (error) {
+      console.log(error);
 
-    toast.error("Failed to delete");
-  }
-};
+      toast.error("Failed to delete");
+    }
+  };
   if (loading) {
     return <div className="flex h-72 items-center justify-center text-slate-500">Loading...</div>;
   }
@@ -352,8 +373,8 @@ const TreatmentsPage = () => {
                   key={key}
                   onClick={() => setFilter(key)}
                   className={`rounded-2xl px-4 py-2.5 text-xs font-semibold transition ${filter === key
-                      ? "bg-sky-500 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    ? "bg-sky-500 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                 >
                   {label}
@@ -393,6 +414,7 @@ const TreatmentsPage = () => {
           treatment={modal === "add" ? null : modal}
           onClose={() => setModal(null)}
           onSave={handleSave}
+          isSaving={isSaving}
         />
       )}
     </div>
