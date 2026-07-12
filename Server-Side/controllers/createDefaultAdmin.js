@@ -29,8 +29,8 @@ export default async function createDefaultAdmin() {
     await User.create({
       email: DEFAULT_ADMIN.email.toLowerCase(),
       passwordHash,
-      Firstname: DEFAULT_ADMIN.Firstname,
-      Lastname: DEFAULT_ADMIN.Lastname,
+      firstName: DEFAULT_ADMIN.Firstname,
+      lastName: DEFAULT_ADMIN.Lastname,
       role: DEFAULT_ADMIN.role,
       isVerified: true, // optional (admin should be verified)
     });
